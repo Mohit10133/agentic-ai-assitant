@@ -41,6 +41,35 @@ def handle_ecommerce(message: str, user_id: str) -> Dict[str, Any]:
             "data": coupon,
         }
 
+    if "apply" in m and "coupon" in m:
+        code = ""
+        for token in message.replace(",", " ").split():
+            clean = token.strip("?.!:").upper()
+            if store.get_coupon(clean):
+                code = clean
+                break
+
+        if code:
+            coupon = store.get_coupon(code)
+            return {
+                "success": True,
+                "message": f"Apply coupon {code} at checkout in the promo code field",
+                "intent": "coupon.apply",
+                "data": {
+                    "code": code,
+                    "description": coupon.get("description", ""),
+                    "status": coupon.get("status", ""),
+                    "expiry": coupon.get("expiry", ""),
+                },
+            }
+
+        return {
+            "success": True,
+            "message": "At checkout, enter your coupon in the promo code field and click Apply. Ask 'show coupons' to see active codes.",
+            "intent": "coupon.apply",
+            "data": {"coupons": store.list_coupons()},
+        }
+
     if "status of my order" in m or "status of order" in m:
         order_id = ''.join(ch for ch in message if ch.isdigit())
         order = store.get_order(order_id)
@@ -185,16 +214,52 @@ def handle_ecommerce(message: str, user_id: str) -> Dict[str, Any]:
             "data": {"order_id": order_id},
         }
 
-    if "cancel order" in m:
+    if "cancel" in m and "order" in m:
+        # Do not execute destructive actions for question-style prompts.
+        is_question_style = (
+            "?" in message
+            or "how do i" in m
+            or "how can i" in m
+            or "can i" in m
+            or "could i" in m
+            or "should i" in m
+        )
+
+        if is_question_style:
+            return {
+                "success": True,
+                "message": "To cancel an order, send an explicit command like: 'Cancel order 10234' or 'Please cancel my latest order'.",
+                "intent": "order.cancel.help",
+                "data": {},
+            }
+
         order_id = ''.join(ch for ch in message if ch.isdigit())
-        order = store.get_order(order_id)
+        order = store.get_order(order_id) if order_id else None
+        if not order:
+            # If no order ID provided, pick a cancellable recent order.
+            user_orders = store.list_user_orders(user_id)
+            for candidate in reversed(user_orders):
+                if candidate.get("status") not in ("Delivered", "Cancelled"):
+                    order = candidate
+                    order_id = str(candidate.get("order_id", ""))
+                    break
+
         if not order or order["user_id"] != user_id:
             return {
                 "success": False,
-                "message": f"Order {order_id} not found",
+                "message": "No cancellable order found. Please provide an order ID.",
                 "intent": "order.cancel",
                 "data": {},
             }
+
+        if order.get("status") in ("Delivered", "Cancelled"):
+            return {
+                "success": False,
+                "message": f"Order {order_id} is {order.get('status')} and cannot be cancelled.",
+                "intent": "order.cancel",
+                "data": {"order_id": order_id, "status": order.get("status")},
+            }
+
         order["status"] = "Cancelled"
         store.update_order(order_id, order)
         return {

@@ -38,7 +38,7 @@ def handle_healthcare(message: str, user_id: str) -> Dict[str, Any]:
             "data": payload,
         }
 
-    if "cancel" in m and "appointment" in m:
+    if ("cancel" in m or "delete" in m) and "appointment" in m:
         first = store.get_any_appointment()
         if not first:
             return {
