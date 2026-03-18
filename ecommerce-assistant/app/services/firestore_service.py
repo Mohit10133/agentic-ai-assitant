@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from google.cloud import firestore
@@ -63,6 +64,7 @@ class DataStore:
         }
         self.travel_bookings: Dict[str, Dict[str, Any]] = {}
         self.appointments: Dict[str, Dict[str, Any]] = {}
+        self.chat_messages: List[Dict[str, Any]] = []
 
     def _doc(self, collection: str, doc_id: str):
         return self.client.collection(collection).document(doc_id)
@@ -173,6 +175,32 @@ class DataStore:
             self._doc("appointments", appointment_id).set(payload)
             return
         self.appointments[appointment_id] = payload
+
+    def save_chat_message(self, user_id: str, role: str, text: str, detected_domain: str = "") -> Dict[str, Any]:
+        payload = {
+            "user_id": user_id,
+            "role": role,
+            "text": text,
+            "detected_domain": detected_domain,
+            "created_ts": datetime.now(timezone.utc).timestamp(),
+        }
+        if self.use_firestore:
+            self._collection("chat_messages").add(payload)
+            return payload
+        self.chat_messages.append(payload)
+        return payload
+
+    def list_chat_messages(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        if self.use_firestore:
+            query = self._collection("chat_messages").where("user_id", "==", user_id)
+            rows = [d.to_dict() for d in query.stream()]
+        else:
+            rows = [m for m in self.chat_messages if m.get("user_id") == user_id]
+
+        rows.sort(key=lambda r: float(r.get("created_ts", 0)))
+        if limit > 0:
+            rows = rows[-limit:]
+        return rows
 
 
 store = DataStore()
