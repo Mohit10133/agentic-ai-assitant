@@ -348,6 +348,14 @@ DEMO_UI_HTML = """
                     });
                 }
 
+                if (payload.code && payload.description) {
+                    lines.push("");
+                    lines.push("Coupon: " + payload.code);
+                    lines.push("Description: " + payload.description);
+                    lines.push("Status: " + payload.status);
+                    lines.push("Expiry: " + payload.expiry);
+                }
+
                 if (payload.order_id) {
                     lines.push("");
                     lines.push("Order " + payload.order_id + ": " + (payload.status || "unknown"));
