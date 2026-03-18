@@ -243,6 +243,7 @@ DEMO_UI_HTML = """
                 <div id="chat-form" class="composer">
                     <textarea id="message" placeholder="Type a message and press Enter. Use Shift+Enter for a new line."></textarea>
                     <button id="send" type="button">Send</button>
+                    <button id="clear" type="button" style="background-color: #f3f4f6; color: #6b7280;">Clear</button>
                 </div>
             </section>
 
@@ -444,6 +445,43 @@ DEMO_UI_HTML = """
 
             sendBtn.addEventListener("click", function () {
                 submitChat();
+            });
+
+            async function clearChat() {
+                if (!confirm("Clear all chat history for this user? This cannot be undone.")) {
+                    return;
+                }
+
+                var userId = (userEl.value || "").trim() || "u1001";
+                streamEl.innerHTML = "";
+                messageEl.value = "";
+                setStatus("Clearing chat...", false);
+
+                try {
+                    var response = await fetch("/clear/" + encodeURIComponent(userId), {
+                        method: "DELETE",
+                    });
+
+                    if (!response.ok) {
+                        var errorData = await response.json().catch(function () {
+                            return {};
+                        });
+                        setStatus("Failed to clear chat: " + (errorData.message || response.statusText), true);
+                        loadHistory();
+                        return;
+                    }
+
+                    setStatus("Chat cleared", false);
+                    showWelcomeIfEmpty();
+                } catch (err) {
+                    setStatus("Error clearing chat: " + (err ? err.message : "Unknown error"), true);
+                    loadHistory();
+                }
+            }
+
+            var clearBtn = document.getElementById("clear");
+            clearBtn.addEventListener("click", function () {
+                clearChat();
             });
 
             formEl.addEventListener("submit", function (event) {
@@ -664,3 +702,10 @@ def chat(req: ChatRequest) -> ChatResponse:
         data=result.get("data"),
         intent=result.get("intent"),
     )
+
+
+@app.delete("/clear/{user_id}")
+def clear_chat(user_id: str) -> dict:
+    """Delete all chat messages for a user."""
+    count = store.delete_chat_messages(user_id=user_id)
+    return {"success": True, "message": f"Deleted {count} messages", "count": count}

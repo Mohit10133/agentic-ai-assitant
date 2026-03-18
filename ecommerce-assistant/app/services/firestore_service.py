@@ -202,5 +202,20 @@ class DataStore:
             rows = rows[-limit:]
         return rows
 
+    def delete_chat_messages(self, user_id: str) -> int:
+        """Delete all chat messages for a user. Returns count of deleted messages."""
+        if self.use_firestore:
+            query = self._collection("chat_messages").where("user_id", "==", user_id)
+            docs = query.stream()
+            count = 0
+            for doc in docs:
+                doc.reference.delete()
+                count += 1
+            return count
+        else:
+            original_count = len(self.chat_messages)
+            self.chat_messages = [m for m in self.chat_messages if m.get("user_id") != user_id]
+            return original_count - len(self.chat_messages)
+
 
 store = DataStore()
