@@ -12,65 +12,46 @@ FastAPI-based conversational assistant for Ecommerce, Travel, and Healthcare wor
 
 ## High-Level Architecture
 
-```mermaid
-graph TD
-    U[User in Browser UI] --> UI[FastAPI UI Routes<br/>GET /, GET /ui]
-    U --> CHAT[POST /chat]
-    U --> HIST[GET /history/{user_id}]
-    U --> CLR[DELETE /clear/{user_id}]
+1. User sends a message from the browser UI.
+2. FastAPI receives the request through `POST /chat`.
+3. Dispatcher selects a domain tool (ecommerce, travel, healthcare).
+4. Domain tool executes business logic and calls datastore/knowledge services.
+5. Datastore reads/writes in Firestore (or in-memory fallback).
+6. API returns structured response and UI renders it.
+7. Chat messages are persisted and can be loaded through history APIs.
 
-    CHAT --> D[Dispatcher]
-    D --> VR[Vertex Router<br/>optional]
-    D --> ET[Ecommerce Tool]
-    D --> TT[Travel Tool]
-    D --> HT[Healthcare Tool]
+Architecture components and relationships:
 
-    ET --> DS[DataStore Service]
-    TT --> DS
-    HT --> DS
-
-    DS --> FS[(Firestore)]
-    DS --> MEM[(In-memory Fallback)]
-
-    ET --> K[Knowledge Service]
-    TT --> K
-    HT --> K
-    K --> KD[(knowledge/*.md)]
-```
+- UI Layer: Browser + `GET /`, `GET /ui`
+- API Layer: FastAPI routes in `ecommerce-assistant/app/main.py`
+- Routing Layer: `ecommerce-assistant/app/tools/dispatcher.py`
+- Domain Layer:
+  - `ecommerce-assistant/app/tools/ecommerce.py`
+  - `ecommerce-assistant/app/tools/travel.py`
+  - `ecommerce-assistant/app/tools/healthcare.py`
+- Service Layer:
+  - `ecommerce-assistant/app/services/firestore_service.py`
+  - `ecommerce-assistant/app/services/knowledge_service.py`
+  - `ecommerce-assistant/app/services/vertex_service.py`
+- Data Layer: Firestore (primary), in-memory structures (fallback)
 
 ## End-to-End Request Flow
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI as Browser UI
-    participant API as FastAPI app/main.py
-    participant DIS as tools/dispatcher.py
-    participant TOOL as Domain Tool
-    participant STORE as firestore_service.py
-    participant DB as Firestore
-
-    User->>UI: Type message and click Send
-    UI->>API: POST /chat {domain, user_id, message}
-    API->>DIS: dispatch(domain, message, user_id)
-    DIS->>TOOL: Route to ecommerce/travel/healthcare
-    TOOL->>STORE: Read/update business data
-    STORE->>DB: Query/write (if configured)
-    DB-->>STORE: Result
-    STORE-->>TOOL: Data payload
-    TOOL-->>DIS: success/message/intent/data
-    DIS-->>API: Routed response
-    API->>STORE: save_chat_message(user)
-    API->>STORE: save_chat_message(assistant)
-    API-->>UI: ChatResponse JSON
-    UI-->>User: Render formatted response bubble
-```
+1. User types a message in UI and clicks Send.
+2. UI calls `POST /chat` with `domain`, `user_id`, and `message`.
+3. API calls dispatcher to resolve domain and handler.
+4. Domain handler performs action and fetches/updates required data.
+5. API saves both user and assistant messages to chat history.
+6. API returns response object: `success`, `message`, `intent`, `data`.
+7. UI formats and displays the response.
+8. On reload/user switch, UI calls `GET /history/{user_id}` to restore chat.
+9. If user wants a fresh start, UI calls `DELETE /clear/{user_id}`.
 
 ## Folder Layout
 
 This README is at workspace root. App code is inside `ecommerce-assistant/`.
 
-```text
+```
 ecommerce-assistant/
   app/
     main.py
@@ -97,15 +78,16 @@ ecommerce-assistant/
 
 ## Core Components
 
-- API and UI layer: `ecommerce-assistant/app/main.py`
-- Routing engine: `ecommerce-assistant/app/tools/dispatcher.py`
-- Domain handlers:
-  - `ecommerce-assistant/app/tools/ecommerce.py`
-  - `ecommerce-assistant/app/tools/travel.py`
-  - `ecommerce-assistant/app/tools/healthcare.py`
-- Data layer: `ecommerce-assistant/app/services/firestore_service.py`
-- Knowledge lookup: `ecommerce-assistant/app/services/knowledge_service.py`
-- Vertex integration: `ecommerce-assistant/app/services/vertex_service.py`
+| Component | Path |
+|---|---|
+| API and UI layer | `ecommerce-assistant/app/main.py` |
+| Routing engine | `ecommerce-assistant/app/tools/dispatcher.py` |
+| Ecommerce handler | `ecommerce-assistant/app/tools/ecommerce.py` |
+| Travel handler | `ecommerce-assistant/app/tools/travel.py` |
+| Healthcare handler | `ecommerce-assistant/app/tools/healthcare.py` |
+| Data layer | `ecommerce-assistant/app/services/firestore_service.py` |
+| Knowledge lookup | `ecommerce-assistant/app/services/knowledge_service.py` |
+| Vertex integration | `ecommerce-assistant/app/services/vertex_service.py` |
 
 ## Requirements
 
@@ -124,7 +106,7 @@ MODEL_NAME=gemini-1.5-flash
 USE_VERTEX_ROUTER=true
 ```
 
-Notes:
+**Notes:**
 
 - Set `USE_VERTEX_ROUTER=true` to enable Vertex-based domain routing
 - If credentials are missing, the app can still run using in-memory fallback for data
@@ -148,21 +130,23 @@ Open:
 
 ## API Surface
 
-- GET /
-- GET /ui
-- POST /ui
-- GET /health
-- POST /chat
-- GET /history/{user_id}
-- DELETE /clear/{user_id}
+| Method | Endpoint |
+|---|---|
+| GET | `/` |
+| GET | `/ui` |
+| POST | `/ui` |
+| GET | `/health` |
+| POST | `/chat` |
+| GET | `/history/{user_id}` |
+| DELETE | `/clear/{user_id}` |
 
 ## Business Behavior Notes
 
-- Cancel order is safe by design:
-  - Question style prompts like "How do I cancel my order?" return guidance only
-  - Explicit commands like "Cancel order 10234" perform cancellation
-- Address update supports natural language and can use latest order if no ID is provided
-- Coupon queries support list, details, and apply guidance
+- **Cancel order** is safe by design:
+  - Question style prompts like `"How do I cancel my order?"` return guidance only
+  - Explicit commands like `"Cancel order 10234"` perform cancellation
+- **Address update** supports natural language and can use latest order if no ID is provided
+- **Coupon queries** support list, details, and apply guidance
 
 ## Sample Chat Payload
 
@@ -189,11 +173,19 @@ From workspace root:
 
 ```powershell
 cd ecommerce-assistant
-gcloud run deploy multi-domain-assistant --source . --region asia-south1 --platform managed --allow-unauthenticated --project agentic-ai-assistants-490311 --quiet
+gcloud run deploy multi-domain-assistant \
+  --source . \
+  --region asia-south1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --project agentic-ai-assistants-490311 \
+  --quiet
 ```
 
 ## Troubleshooting
 
-- Generic responses: verify env vars and routing path
-- Firestore failures: verify service account roles and project config
-- UI mismatch after changes: redeploy and hard refresh browser
+| Symptom | Fix |
+|---|---|
+| Generic responses | Verify env vars and routing path |
+| Firestore failures | Verify service account roles and project config |
+| UI mismatch after changes | Redeploy and hard refresh browser |
