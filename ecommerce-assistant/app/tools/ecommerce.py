@@ -96,9 +96,24 @@ def handle_ecommerce(message: str, user_id: str) -> Dict[str, Any]:
             "data": order,
         }
 
-    if "change" in m and "address" in m and "order" in m or "update" in m and "address" in m:
+    if ("change" in m or "update" in m) and "address" in m:
         order_id = ''.join(ch for ch in message if ch.isdigit())
-        order = store.get_order(order_id)
+        
+        # If no order ID mentioned, use the user's most recent order
+        if not order_id:
+            recent_orders = store.list_user_orders(user_id)
+            if not recent_orders:
+                return {
+                    "success": False,
+                    "message": "No orders found. Please place an order first or specify an order ID.",
+                    "intent": "order.update_address",
+                    "data": {},
+                }
+            order = recent_orders[-1]  # Get most recent
+            order_id = order["order_id"]
+        else:
+            order = store.get_order(order_id)
+        
         if not order or order["user_id"] != user_id:
             return {
                 "success": False,
@@ -113,13 +128,37 @@ def handle_ecommerce(message: str, user_id: str) -> Dict[str, Any]:
                 "intent": "order.update_address",
                 "data": {},
             }
-        order["address"] = "Updated Address (provided by user)"
+        # Extract address from message - look for common patterns
+        new_address = message
+        if " to " in new_address.lower():
+            new_address = new_address.split(" to ")[-1].strip()
+        elif " is " in new_address.lower():
+            new_address = new_address.split(" is ")[-1].strip()
+        elif "address:" in new_address.lower():
+            new_address = new_address.split("address:")[-1].strip()
+        else:
+            new_address = new_address.replace(f"order {order_id}", "").strip()
+        
+        # Validate that we got a real address (not just keywords)
+        keywords = ["change", "delivery", "address", "update", "my", "the", "please"]
+        new_address_lower = new_address.lower()
+        word_count = len([w for w in new_address_lower.split() if w not in keywords])
+        
+        if word_count < 2:
+            return {
+                "success": False,
+                "message": f"Please provide the new delivery address. Example: 'Change delivery address to 42 Main Street'",
+                "intent": "order.update_address",
+                "data": {},
+            }
+        
+        order["address"] = new_address
         store.update_order(order_id, order)
         return {
             "success": True,
-            "message": f"Delivery address for order {order_id} has been updated",
+            "message": f"Delivery address for order {order_id} updated to: {order['address']}",
             "intent": "order.update_address",
-            "data": {"order_id": order_id},
+            "data": {"order_id": order_id, "new_address": order["address"]},
         }
 
     if ("update" in m or "change" in m) and "quantity" in m and "order" in m:

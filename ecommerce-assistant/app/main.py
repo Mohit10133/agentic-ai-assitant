@@ -356,9 +356,34 @@ DEMO_UI_HTML = """
                     lines.push("Expiry: " + payload.expiry);
                 }
 
-                if (payload.order_id) {
+                if (payload.delivery_date) {
                     lines.push("");
-                    lines.push("Order " + payload.order_id + ": " + (payload.status || "unknown"));
+                    lines.push("Expected Delivery: " + payload.delivery_date);
+                }
+
+                if (payload.profile) {
+                    lines.push("");
+                    lines.push("Profile: " + payload.profile.name);
+                    lines.push("Email: " + payload.profile.email);
+                    lines.push("Address: " + payload.profile.address);
+                }
+
+                if (Array.isArray(payload.orders) && payload.orders.length) {
+                    lines.push("");
+                    lines.push("Order History:");
+                    payload.orders.forEach(function (o) {
+                        lines.push("- Order " + o.order_id + ": " + o.status + " (Delivery: " + o.delivery_date + ")");
+                    });
+                }
+
+                if (payload.order_id && payload.status) {
+                    lines.push("");
+                    lines.push("Order " + payload.order_id + ": " + payload.status);
+                }
+
+                if (payload.new_address) {
+                    lines.push("");
+                    lines.push("Updated Address: " + payload.new_address);
                 }
 
                 if (Array.isArray(payload.results) && payload.results.length) {
